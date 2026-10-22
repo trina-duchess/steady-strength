@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#2E6A4E">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}[hidden]{display:none!important}img{max-width:100%}</style>
 <title>Steady Strength</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -212,11 +211,13 @@ const fmt=d=>d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
 function blockStart(d){let s=monday(d);if(d.getDay()===6||d.getDay()===0)s=addDays(s,7);return iso(s)}
 function fresh(){
   const t=today();
-  return {start:blockStart(t),firstDay:iso(t),strength:[1,3,5],walk:[6],logs:{},loads:{}};
+  const bs=blockStart(t);
+  return {start:bs,firstDay:bs<iso(t)?bs:iso(t),strength:[1,3,5],walk:[6],logs:{},loads:{}};
 }
 let S;
 try{S=JSON.parse(localStorage.getItem(KEY))||fresh()}catch(e){S=fresh()}
-if(!S.firstDay){S.firstDay=iso(today());try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+if(!S.firstDay){S.firstDay=iso(today())}
+{const ks=Object.keys(S.logs||{}).sort();if(ks.length&&ks[0]<S.firstDay)S.firstDay=ks[0];try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 const beforeStart=d=>d<parse(S.firstDay);
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 let V={tab:'week',weekOffset:null,session:null};
