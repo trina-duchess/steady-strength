@@ -188,7 +188,7 @@ const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 /* Every level an exercise can be done at. Older keys stay so past logs still read correctly. */
 const GEAR={
  BW:'Bodyweight',
- DB10:'10 lb dumbbells (pair)',DB10x1:'10 lb dumbbell',
+ DB10:'Two 10 lb dumbbells (20 lb total)',KB15G:'15 lb kettlebell held at chest',KB18G:'18 lb kettlebell held at chest',DB10x1:'10 lb dumbbell',
  KB15:'15 lb kettlebell',KB18:'18 lb kettlebell (8 kg)',KB26:'26 lb kettlebell',KB35:'35 lb kettlebell',
  KB35P:'35 lb kettlebell, 3-sec pause at the bottom',
  KB15x1:'15 lb kettlebell, one arm at a time',KB18x1:'18 lb kettlebell, one arm at a time',KB26x1:'26 lb kettlebell, one arm at a time',
@@ -209,7 +209,7 @@ const EX={
  bridge:{name:'Glute bridge',works:'Glutes, low back',target:12,unit:'reps',loads:['BW','KB15','KB18','KB26','KB35'],def:'BW',cue:'Lie on your back, feet flat. Push through your heels to lift your hips until knees, hips and shoulders line up. Pause one second at the top. Rest a bell on your hips when you add weight.'},
  deadbug:{name:'Dead bug',works:'Core',target:8,unit:'reps',per:'side',harder:true,loads:['BW','DBUG_STRAIGHT','DBUG_DB'],def:'BW',cue:'On your back, arms up, knees bent at 90°. Press your low back into the floor. Slowly lower one arm and the opposite leg, return, then switch. Harder: straighten the leg as it reaches, then hold a dumbbell in both hands overhead.'},
  hang:{name:'Dead hang',works:'Grip, shoulders',unit:'sec',fixedSets:3,harder:true,loads:['FEET_ON','FEET_OFF','HANG_SHRUG'],def:'FEET_ON',cue:'Grip the bar shoulder-width apart and let your shoulders gently stretch. Keep your toes on the floor to take some weight until you can hold 30 seconds. Shrugs: without bending your arms, pull your shoulders down away from your ears, then let them rise.'},
- stepup:{name:'Step-up',works:'Legs, balance',target:10,unit:'reps',per:'leg',loads:['BW','DB10','KB26G','KB35G'],def:'DB10',cue:'Step onto the bottom stair with your whole foot. Push through that heel to stand up, then step down slowly. Hold the rail if you need it.'},
+ stepup:{name:'Step-up',works:'Legs, balance',target:10,unit:'reps',per:'leg',loads:['BW','KB15G','KB18G','DB10','KB26G','KB35G'],def:'DB10',cue:'Step onto the bottom stair with your whole foot. Push through that heel to stand up, then step down slowly. Hold the rail if you need it.'},
  rdl:{name:'Kettlebell Romanian deadlift',works:'Hamstrings, glutes',target:12,unit:'reps',loads:['KB15','KB18','KB26','KB35','KB35P'],def:'KB26',cue:'Hold the bell in both hands. Soften your knees, push your hips back and slide the bell down your thighs with a flat back. Stand up by squeezing your glutes.'},
  press:{name:'Seated overhead press',works:'Shoulders, arms',target:12,unit:'reps',loads:['DB10','KB15x1','KB18x1','KB26x1'],def:'DB10',cue:'Sit tall with your back against the chair. Press the weights straight up without arching, then lower to shoulder height.'},
  pullapart:{name:'Band pull-apart',works:'Upper back, posture',target:15,unit:'reps',harder:true,loads:['BAND','BAND_CLOSE','BAND_DOUBLE'],def:'BAND',cue:'Hold the band at shoulder height with straight arms. Pull it apart until it touches your chest, squeezing your shoulder blades together. Return slowly. Moving your hands closer or doubling the band makes it tighter.'},
@@ -268,6 +268,15 @@ let V={tab:'week',weekOffset:null,session:null,hist:null,histFrom:null};
 function weekNo(d){return Math.floor((monday(d)-parse(S.start))/(7*864e5))+1}
 function setsFor(id,wk){const e=EX[id];return e.fixedSets||(wk<=2?2:3)}
 function targetFor(id,wk){if(id==='hang')return Math.min(10+5*Math.max(wk-1,0),30);return EX[id].target}
+/* rep range: after moving up a level you start near the bottom and add reps until you reach the top */
+const lowFor=id=>Math.round(EX[id].target*2/3);
+function goalFor(id,wk,load,date){
+  const top=targetFor(id,wk);if(EX[id].unit!=='reps')return top;
+  const h=history(id).filter(s=>s.load===load&&s.date<date);
+  if(!h.length)return lowFor(id);
+  const m=Math.min(...h[h.length-1].sets);
+  return Math.max(lowFor(id),Math.min(top,m>=top?top:m+1));
+}
 function loadOf(id){const e=EX[id];const l=S.loads[id];return l&&GEAR[l]?l:e.def}
 const upWord=id=>EX[id].harder?'Make it harder':'Go heavier';
 const unitOf=e=>e.unit;
@@ -380,9 +389,11 @@ function checklist(prefix,items,log){
 }
 
 function exBlock(id,log,wk){
-  const e=EX[id],n=setsFor(id,wk),tgt=targetFor(id,wk);
+  const e=EX[id],n=setsFor(id,wk),top=targetFor(id,wk);
   const ent=(log.entries&&log.entries[id])||{};
   const load=ent.load||loadOf(id);
+  const tgt=goalFor(id,wk,load,V.session);
+  const range=e.unit==='reps'?`${lowFor(id)}–${top}`:top;
   const up=ready(id);
   const suggest=up&&e.loads.indexOf(up)>e.loads.indexOf(load);
   const nx=nextLoad(id,load);
@@ -392,7 +403,7 @@ function exBlock(id,log,wk){
   const opts=`<select id="l-${id}" data-load="${id}" aria-label="${e.name} level">${e.loads.map(k=>`<option value="${k}" ${k===load?'selected':''}>${GEAR[k]}</option>`).join('')}</select>`;
   const upBtn=nx?`<button class="upbtn ${suggest?'hot':''}" data-up="${id}">${upWord(id)} ↑</button>`:`<button class="upbtn" disabled>Top level</button>`;
   const complete=Array.from({length:n},(_,i)=>ent.sets&&ent.sets[i]).every(v=>v!==undefined&&v!=='');
-  return `<div class="ex ${complete?'complete':''}"><div class="ex-head"><div><h3>${e.name}</h3><div class="muted small">${n} × ${tgt} ${unitOf(e)}${per} · ${e.works}</div></div>${suggest?`<span class="pill up">Ready</span>`:''}</div>
+  return `<div class="ex ${complete?'complete':''}"><div class="ex-head"><div><h3>${e.name}</h3><div class="muted small">${n} × ${range} ${unitOf(e)}${per} · ${e.works}</div>${e.unit==='reps'?`<div class="small"><strong>Today’s goal: ${tgt} reps</strong>${tgt<top?` <span class="muted">· add a rep each session until you reach ${top}</span>`:''}</div>`:''}</div>${suggest?`<span class="pill up">Ready</span>`:''}</div>
     <div class="loadline">${opts}${upBtn}</div>
     ${suggest?`<div class="small" style="color:var(--iron)">You hit every set two sessions in a row. Tap “${upWord(id)}” to move to: ${GEAR[up]}.</div>`:(nx&&streak(id)===1?`<div class="small muted">You hit every set last time. Do it once more at this level, then move up.</div>`:'')}
     <div class="sets">${sets}<button class="donebtn ${complete?'on':''}" data-fill="${id}" aria-pressed="${complete}">${complete?'Done ✓':'Done'}</button></div>
@@ -438,7 +449,7 @@ function viewPlan(){
     ${p.ex.map(planRow).join('')}
     <div class="eyebrow" style="margin-top:10px">Balance</div>${p.bal.map(planRow).join('')}</div>`};
   return header('The plan')+`<div class="stack">
-    <div class="note small"><strong>How it works.</strong> Three strength days a week alternate Workout A and B. Weeks 1–2 use 2 sets, then 3 sets. Every exercise has levels. When you hit the top number on every set <strong>two sessions in a row</strong> with good form, it shows <strong>Ready</strong> and the button lights up. After moving up, expect fewer reps (about 8) and build back to the top number. Tap <strong>Go heavier</strong> (or <strong>Make it harder</strong> for bodyweight and balance moves) to set your next workout at the next level.</div>
+    <div class="note small"><strong>How it works.</strong> Three strength days a week alternate Workout A and B. Weeks 1–2 use 2 sets, then 3 sets. Every exercise has levels. When you hit the top number on every set <strong>two sessions in a row</strong> with good form, it shows <strong>Ready</strong> and the button lights up. After moving up, the app sets today’s goal at the bottom of the rep range (for example 8 of 8–12) and raises it by one rep each session until you reach the top again. Tap <strong>Go heavier</strong> (or <strong>Make it harder</strong> for bodyweight and balance moves) to set your next workout at the next level.</div>
     ${card('A')}${card('B')}
     <div class="block"><h2><span class="tag W">W</span>Walk + mobility</h2><p class="muted small">Your days off from strength. Optional, never marked missed. Brisk 30-minute walk, then:</p>${MOB.map(m=>`<div class="loadrow"><div>${m}${cueHtml(m)}</div></div>`).join('')}</div>
     <div class="block"><h3>Warm-up before every strength day</h3>${WARM.map(m=>`<div class="loadrow"><div>${m}${cueHtml(m)}</div></div>`).join('')}</div>
@@ -556,7 +567,7 @@ document.addEventListener('click',e=>{
   if(b.dataset.fill){const id=b.dataset.fill,ent=ensureEntry(id),wk=Math.max(weekNo(parse(V.session)),1);
     const n=setsFor(id,wk);
     if(Array.from({length:n},(_,i)=>ent.sets[i]).every(v=>v!==undefined&&v!=='')){ent.sets=[];save();render();return}
-    ent.sets=Array.from({length:n},()=>String(targetFor(id,wk)));save();render();return}
+    ent.sets=Array.from({length:n},()=>String(goalFor(id,wk,ent.load,V.session)));save();render();return}
   if('finish' in b.dataset){const l=ensureLog();l.done=true;
     Object.entries(l.entries).forEach(([id,ent])=>{if(ent.load&&EX[id])S.loads[id]=ent.load});
     save();toast('Session saved');V.session=null;render();scrollTo(0,0);return}
