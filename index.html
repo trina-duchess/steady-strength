@@ -310,14 +310,19 @@ function history(id){
     return {date:k,wk:weekNo(parse(k)),load:en.load||EX[id].def,sets:(en.sets||[]).filter(v=>v!==''&&v!=null).map(Number)}});
 }
 function lastEntry(id){const h=history(id);return h.length?h[h.length-1]:null}
-/* ready to move up: last session at the current level hit the top number on every set */
+/* ready to move up ("2-for-2"): the last TWO sessions were both at the current level
+   and hit the top number on every set */
+const READY_AFTER=2;
+function hitAll(id,s){const tgt=id==='hang'?30:EX[id].target;return s.sets.length>=setsFor(id,s.wk)&&s.sets.every(r=>r>=tgt)}
 function ready(id){
-  const e=EX[id],last=lastEntry(id);if(!last)return null;
-  const nx=nextLoad(id,last.load);if(!nx)return null;
-  const tgt=id==='hang'?30:e.target;
-  if(last.sets.length>=setsFor(id,last.wk)&&last.sets.every(r=>r>=tgt))return nx;
+  const h=history(id);if(h.length<READY_AFTER)return null;
+  const recent=h.slice(-READY_AFTER),load=recent[recent.length-1].load;
+  const nx=nextLoad(id,load);if(!nx)return null;
+  if(recent.every(s=>s.load===load&&hitAll(id,s)))return nx;
   return null;
 }
+function streak(id){const h=history(id);if(!h.length)return 0;const load=h[h.length-1].load;let n=0;
+  for(let i=h.length-1;i>=0&&h[i].load===load&&hitAll(id,h[i]);i--)n++;return n}
 
 /* ---------- render ---------- */
 const $=s=>document.querySelector(s);
@@ -389,7 +394,7 @@ function exBlock(id,log,wk){
   const complete=Array.from({length:n},(_,i)=>ent.sets&&ent.sets[i]).every(v=>v!==undefined&&v!=='');
   return `<div class="ex ${complete?'complete':''}"><div class="ex-head"><div><h3>${e.name}</h3><div class="muted small">${n} × ${tgt} ${unitOf(e)}${per} · ${e.works}</div></div>${suggest?`<span class="pill up">Ready</span>`:''}</div>
     <div class="loadline">${opts}${upBtn}</div>
-    ${suggest?`<div class="small" style="color:var(--iron)">You hit every set last time. Tap “${upWord(id)}” to move to: ${GEAR[up]}.</div>`:''}
+    ${suggest?`<div class="small" style="color:var(--iron)">You hit every set two sessions in a row. Tap “${upWord(id)}” to move to: ${GEAR[up]}.</div>`:(nx&&streak(id)===1?`<div class="small muted">You hit every set last time. Do it once more at this level, then move up.</div>`:'')}
     <div class="sets">${sets}<button class="donebtn ${complete?'on':''}" data-fill="${id}" aria-pressed="${complete}">${complete?'Done ✓':'Done'}</button></div>
     <div class="row"><details><summary>How to do it</summary><p class="small">${e.cue}</p></details></div></div>`;
 }
@@ -433,7 +438,7 @@ function viewPlan(){
     ${p.ex.map(planRow).join('')}
     <div class="eyebrow" style="margin-top:10px">Balance</div>${p.bal.map(planRow).join('')}</div>`};
   return header('The plan')+`<div class="stack">
-    <div class="note small"><strong>How it works.</strong> Three strength days a week alternate Workout A and B. Weeks 1–2 use 2 sets, then 3 sets. Every exercise has levels. When you hit the top number on every set, it shows <strong>Ready</strong> and the button lights up. Tap <strong>Go heavier</strong> (or <strong>Make it harder</strong> for bodyweight and balance moves) to set your next workout at the next level.</div>
+    <div class="note small"><strong>How it works.</strong> Three strength days a week alternate Workout A and B. Weeks 1–2 use 2 sets, then 3 sets. Every exercise has levels. When you hit the top number on every set <strong>two sessions in a row</strong> with good form, it shows <strong>Ready</strong> and the button lights up. After moving up, expect fewer reps (about 8) and build back to the top number. Tap <strong>Go heavier</strong> (or <strong>Make it harder</strong> for bodyweight and balance moves) to set your next workout at the next level.</div>
     ${card('A')}${card('B')}
     <div class="block"><h2><span class="tag W">W</span>Walk + mobility</h2><p class="muted small">Your days off from strength. Optional, never marked missed. Brisk 30-minute walk, then:</p>${MOB.map(m=>`<div class="loadrow"><div>${m}${cueHtml(m)}</div></div>`).join('')}</div>
     <div class="block"><h3>Warm-up before every strength day</h3>${WARM.map(m=>`<div class="loadrow"><div>${m}${cueHtml(m)}</div></div>`).join('')}</div>
